@@ -222,6 +222,42 @@
             let isLoginMode = true;
             let currentUserId = null;
 
+            // --- NEW: Handle login success and URL cleanup ---
+            function processLogin(session) {
+                currentUserId = session.user.id;
+                document.getElementById('login-page').style.display = 'none';
+                document.getElementById('dashboard-page').style.display = 'block';
+                
+                // Clean the #access_token from the URL bar so it looks professional
+                if (window.location.hash && window.location.hash.includes('access_token')) {
+                    window.history.replaceState(null, null, window.location.pathname);
+                }
+            }
+
+            function processLogout() {
+                currentUserId = null;
+                document.getElementById('dashboard-page').style.display = 'none';
+                document.getElementById('login-page').style.display = 'flex';
+                document.getElementById('password').value = '';
+                confirmPasswordInput.value = '';
+            }
+
+            // --- NEW: Explicitly check for session on initial page load ---
+            supabase.auth.getSession().then(({ data: { session } }) => {
+                if (session) {
+                    processLogin(session);
+                }
+            });
+
+            // Keep the listener active for standard logouts and token refreshes
+            supabase.auth.onAuthStateChange((event, session) => {
+                if (session) {
+                    processLogin(session);
+                } else {
+                    processLogout();
+                }
+            });
+
             // 3. AUTH LOGIC: The Toggle
             toggleBtn.addEventListener('click', (e) => {
                 e.preventDefault();
@@ -332,23 +368,9 @@
                 }
             });
 
-            // 5. AUTH LOGIC: Sign Out & State Observer
+            // 5. AUTH LOGIC: Sign Out
             document.getElementById('logout-btn').addEventListener('click', () => {
                 supabase.auth.signOut();
-            });
-
-            supabase.auth.onAuthStateChange((event, session) => {
-                if (session) {
-                    currentUserId = session.user.id;
-                    document.getElementById('login-page').style.display = 'none';
-                    document.getElementById('dashboard-page').style.display = 'block';
-                } else {
-                    currentUserId = null;
-                    document.getElementById('dashboard-page').style.display = 'none';
-                    document.getElementById('login-page').style.display = 'flex';
-                    document.getElementById('password').value = '';
-                    confirmPasswordInput.value = '';
-                }
             });
 
             // 6. PROFILE LOGIC
