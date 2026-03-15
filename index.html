@@ -212,7 +212,6 @@
             const authForm = document.getElementById('auth-form');
             const authMsg = document.getElementById('auth-message');
             
-            // Sign Up Specific Elements
             const signupFields = document.getElementById('signup-fields');
             const signupNameInput = document.getElementById('signup-name');
             const signupBranchInput = document.getElementById('signup-branch');
@@ -222,13 +221,29 @@
             let isLoginMode = true;
             let currentUserId = null;
 
-            // --- NEW: Handle login success and URL cleanup ---
+            // --- DETECT VERIFICATION FLOW ---
+            let isSignupVerification = window.location.hash.includes('type=signup');
+
             function processLogin(session) {
+                // If this load is from a verification email click
+                if (isSignupVerification) {
+                    isSignupVerification = false; 
+                    window.history.replaceState(null, null, window.location.pathname);
+                    
+                    // Force sign out immediately after verification
+                    supabase.auth.signOut().then(() => {
+                        authMsg.innerHTML = "<strong>Email Verified Successfully!</strong><br>Please log in manually using your email and password.";
+                        authMsg.className = "alert alert-success";
+                        authMsg.style.display = "block";
+                    });
+                    return; 
+                }
+
+                // Standard Login Success
                 currentUserId = session.user.id;
                 document.getElementById('login-page').style.display = 'none';
                 document.getElementById('dashboard-page').style.display = 'block';
                 
-                // Clean the #access_token from the URL bar so it looks professional
                 if (window.location.hash && window.location.hash.includes('access_token')) {
                     window.history.replaceState(null, null, window.location.pathname);
                 }
@@ -242,14 +257,14 @@
                 confirmPasswordInput.value = '';
             }
 
-            // --- NEW: Explicitly check for session on initial page load ---
+            // Check session on load
             supabase.auth.getSession().then(({ data: { session } }) => {
                 if (session) {
                     processLogin(session);
                 }
             });
 
-            // Keep the listener active for standard logouts and token refreshes
+            // State Observer
             supabase.auth.onAuthStateChange((event, session) => {
                 if (session) {
                     processLogin(session);
@@ -269,31 +284,21 @@
                 toggleBtn.innerText = isLoginMode ? "Create New Account" : "Login";
                 
                 if (isLoginMode) {
-                    // Hide signup fields
                     signupFields.style.display = 'none';
                     confirmPasswordGroup.style.display = 'none';
-                    
-                    // Remove required attributes
                     signupNameInput.removeAttribute('required');
                     confirmPasswordInput.removeAttribute('required');
-                    
-                    // Clear values
                     signupNameInput.value = '';
                     signupBranchInput.value = 'MIRI';
                     confirmPasswordInput.value = ''; 
-                    
                     if(authMsg.className !== "alert alert-success") {
                         authMsg.style.display = 'none';
                     }
                 } else {
-                    // Show signup fields
                     signupFields.style.display = 'block';
                     confirmPasswordGroup.style.display = 'block';
-                    
-                    // Add required attributes for signing up
                     signupNameInput.setAttribute('required', 'true');
                     confirmPasswordInput.setAttribute('required', 'true');
-                    
                     authMsg.style.display = 'none';
                 }
             });
@@ -312,13 +317,11 @@
                         const { error } = await supabase.auth.signInWithPassword({ email, password });
                         if (error) throw error;
                     } else {
-                        // Registration Validation
                         const confirmPassword = confirmPasswordInput.value;
                         if (password !== confirmPassword) {
-                            throw new Error("Passwords do not match. Please verify and try again.");
+                            throw new Error("Passwords do not match.");
                         }
 
-                        // Get the extra data to pass to the trigger
                         const fullName = signupNameInput.value;
                         const branch = signupBranchInput.value;
 
@@ -326,6 +329,8 @@
                             email, 
                             password,
                             options: {
+                                // Forces the email to redirect specifically to your root domain
+                                emailRedirectTo: window.location.origin + window.location.pathname,
                                 data: {
                                     full_name: fullName,
                                     branch: branch
@@ -334,27 +339,15 @@
                         });
                         if (error) throw error;
                         
-                        authMsg.innerHTML = "<strong>Account created successfully!</strong><br>For your security, please check your email inbox to verify your account before logging in.";
+                        authMsg.innerHTML = "<strong>Account created!</strong><br>Please verify your email to continue.";
                         authMsg.className = "alert alert-success";
                         authMsg.style.display = "block";
                         
-                        // Switch back to login UI automatically
                         isLoginMode = true;
                         authTitle.innerText = "Welcome Back";
                         authBtn.innerText = "Login";
-                        toggleText.innerText = "Don't have an account?";
-                        toggleBtn.innerText = "Create New Account";
-                        
                         signupFields.style.display = 'none';
                         confirmPasswordGroup.style.display = 'none';
-                        
-                        signupNameInput.removeAttribute('required');
-                        confirmPasswordInput.removeAttribute('required');
-                        
-                        document.getElementById('password').value = '';
-                        signupNameInput.value = '';
-                        signupBranchInput.value = 'MIRI';
-                        confirmPasswordInput.value = '';
                     }
                 } catch (err) {
                     authMsg.innerText = err.message;
@@ -362,9 +355,7 @@
                     authMsg.style.display = "block";
                 } finally {
                     authBtn.disabled = false;
-                    if (authBtn.innerText === "Authenticating..." || authBtn.innerText === "Creating Account...") {
-                         authBtn.innerText = isLoginMode ? "Login" : "Sign Up";
-                    }
+                    authBtn.innerText = isLoginMode ? "Login" : "Sign Up";
                 }
             });
 
@@ -380,16 +371,12 @@
             document.getElementById('open-profile-btn').addEventListener('click', async () => {
                 if(!currentUserId) return;
                 profileMsg.style.display = 'none';
-                
-                // Fetch user data from the user_profiles table
-                const { data, error } = await supabase.from('user_profiles').select('*').eq('id', currentUserId).single();
-                
+                const { data } = await supabase.from('user_profiles').select('*').eq('id', currentUserId).single();
                 if(data) {
                     document.getElementById('profile-role').value = data.role || 'Staff';
                     document.getElementById('profile-name').value = data.full_name || '';
                     document.getElementById('profile-branch').value = data.branch || 'MIRI';
                 }
-                
                 profileModal.style.display = 'flex';
             });
 
@@ -402,22 +389,15 @@
                 const saveBtn = document.getElementById('save-profile-btn');
                 saveBtn.disabled = true;
                 saveBtn.innerText = 'Saving...';
-
-                const newName = document.getElementById('profile-name').value;
-                const newBranch = document.getElementById('profile-branch').value;
-
                 try {
                     const { error } = await supabase.from('user_profiles').update({ 
-                        full_name: newName, 
-                        branch: newBranch
+                        full_name: document.getElementById('profile-name').value, 
+                        branch: document.getElementById('profile-branch').value
                     }).eq('id', currentUserId);
-
                     if (error) throw error;
-
-                    profileMsg.innerText = "Profile updated successfully!";
+                    profileMsg.innerText = "Profile updated!";
                     profileMsg.className = "alert alert-success";
                     profileMsg.style.display = "block";
-                    
                     setTimeout(() => { profileModal.style.display = 'none'; }, 1500);
                 } catch (err) {
                     profileMsg.innerText = err.message;
@@ -428,12 +408,9 @@
                     saveBtn.innerText = 'Save Updates';
                 }
             });
-
         });
 
-        function checkModule(event, targetPath) {
-            // Optional fallback
-        }
+        function checkModule(event, targetPath) {}
     </script>
 </body>
 </html>
