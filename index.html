@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Hub - AInventory</title>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        :root { --primary: #dc2626; --success: #059669; --dark: #1e293b; --gray: #64748b; --border: #e2e8f0; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Montserrat', sans-serif; background: #f8fafc; min-height: 100vh; overflow-x: hidden; }
+        
+        /* Typography */
+        .page-title { text-align: center; margin-bottom: 2rem; }
+        .page-title h1 { font-size: 1.5rem; font-weight: 600; color: var(--dark); }
+        .page-title .divider { width: 60px; height: 3px; background: var(--success); margin: 0.5rem auto 0; border-radius: 2px; }
+
+        /* Login Page */
+        #login-page { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: 2rem 1rem; }
+        .logo-large { font-size: 3rem; font-weight: 800; letter-spacing: -2px; margin-bottom: 0.5rem; }
+        .logo-large .ai { color: var(--primary); }
+        .logo-large .inv { color: var(--dark); }
+        .tagline { font-size: 0.65rem; font-weight: 600; letter-spacing: 3px; color: var(--gray); text-transform: uppercase; margin-bottom: 2rem; }
+        
+        .auth-card { width: 100%; max-width: 380px; background: #fff; border-radius: 1rem; box-shadow: 0 4px 20px rgba(0,0,0,0.08); padding: 2rem; }
+        .auth-card h3 { font-size: 1.125rem; font-weight: 600; color: var(--dark); margin-bottom: 1.5rem; text-align: center; }
+        .form-group { margin-bottom: 1rem; }
+        .form-group label { display: block; font-size: 0.6875rem; font-weight: 600; color: var(--gray); text-transform: uppercase; margin-bottom: 0.5rem; }
+        .form-group input { width: 100%; padding: 0.75rem 1rem; border: 1px solid var(--border); border-radius: 0.5rem; font-size: 0.9375rem; }
+        .form-group input:focus { outline: none; border-color: var(--primary); }
+        
+        .btn { width: 100%; padding: 0.875rem; border: none; border-radius: 0.5rem; font-size: 0.8125rem; font-weight: 600; cursor: pointer; text-transform: uppercase; letter-spacing: 1px; transition: 0.2s; }
+        .btn-primary { background: var(--primary); color: #fff; }
+        .btn-primary:hover { background: #b91c1c; }
+        .btn-primary:disabled { opacity: 0.7; cursor: not-allowed; }
+        
+        .toggle-link { text-align: center; margin-top: 1rem; color: var(--gray); font-size: 0.75rem; }
+        .toggle-link a { color: var(--primary); text-decoration: none; font-weight: 600; cursor: pointer; position: relative; z-index: 10; display: inline-block; padding: 0.5rem; }
+        .toggle-link a:hover { text-decoration: underline; }
+
+        /* Dashboard & Menu */
+        #dashboard-page { display: none; }
+        .header { background: #fff; padding: 1rem 2rem; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+        .logo-sm { font-size: 1.5rem; font-weight: 800; }
+        .logo-sm .ai { color: var(--primary); }
+        .logo-sm .inv { color: var(--dark); }
+        .logout-btn { background: none; border: none; color: var(--gray); font-size: 0.75rem; font-weight: 600; text-transform: uppercase; cursor: pointer; }
+        .logout-btn:hover { color: var(--primary); }
+
+        .container { max-width: 1100px; margin: 0 auto; padding: 2rem 1rem; }
+        
+        .menu-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem; margin-top: 1rem; }
+        
+        /* Module Cards (Links) */
+        .menu-card { display: block; text-decoration: none; color: inherit; background: #fff; padding: 1.5rem; border-radius: 1rem; box-shadow: 0 4px 12px rgba(0,0,0,0.05); cursor: pointer; border: 1px solid transparent; transition: 0.3s; text-align: left; }
+        .menu-card:hover { transform: translateY(-3px); border-color: var(--primary); box-shadow: 0 8px 24px rgba(0,0,0,0.1); }
+        .menu-card .icon { font-size: 2rem; margin-bottom: 1rem; display: block; }
+        .menu-card h2 { font-size: 1rem; color: var(--dark); text-transform: uppercase; margin-bottom: 0.5rem; }
+        .menu-card p { font-size: 0.75rem; color: var(--gray); line-height: 1.4; }
+
+        .alert { padding: 0.75rem; border-radius: 0.5rem; margin-bottom: 1rem; font-size: 0.75rem; text-align: center; display: none; }
+        .alert-error { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+        .alert-success { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; }
+    </style>
+</head>
+<body>
+
+    <div id="login-page">
+        <div class="logo-large"><span class="ai">AI</span><span class="inv">nventory</span></div>
+        <div class="tagline">Inventory Management System</div>
+        
+        <div class="auth-card">
+            <div id="auth-message" class="alert"></div>
+            <h3 id="auth-title">Welcome Back</h3>
+            <form id="auth-form">
+                <div class="form-group">
+                    <label>Email Address</label>
+                    <input type="email" id="email" required placeholder="name@company.com">
+                </div>
+                <div class="form-group">
+                    <label>Password</label>
+                    <input type="password" id="password" required placeholder="••••••••" minlength="6">
+                </div>
+                <button type="submit" class="btn btn-primary" id="auth-btn">Login</button>
+            </form>
+            <div class="toggle-link">
+                <span id="toggle-text">Don't have an account?</span> 
+                <a id="toggle-btn">Create New Account</a>
+            </div>
+        </div>
+    </div>
+
+    <div id="dashboard-page">
+        <header class="header">
+            <div class="logo-sm"><span class="ai">AI</span><span class="inv">nventory</span></div>
+            <button class="logout-btn" id="logout-btn">Sign Out</button>
+        </header>
+
+        <div class="container">
+            <div class="page-title">
+                <h1>Operations Hub</h1>
+                <div class="divider"></div>
+            </div>
+            
+            <div class="menu-grid">
+                <a href="equipment/index.html" class="menu-card" onclick="checkModule(event, 'equipment/index.html')">
+                    <span class="icon">⚙️</span>
+                    <h2>Equipment Inventory</h2>
+                    <p>Asset tracking, machine specifications, and maintenance scheduling for site operations.</p>
+                </a>
+                
+                <a href="parts/index.html" class="menu-card">
+                    <span class="icon">📦</span>
+                    <h2>Parts Inventory</h2>
+                    <p>Manage spare parts stock, track borrowed items, and scan POs using AI.</p>
+                </a>
+                
+                <a href="customer/index.html" class="menu-card" onclick="checkModule(event, 'customer/index.html')">
+                    <span class="icon">👥</span>
+                    <h2>Customer Database</h2>
+                    <p>Comprehensive client registry, project history, and contact management.</p>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            
+            // 1. Initialize Supabase
+            const supabase = window.supabase.createClient(
+                'https://jwvuagztbedbbqjbnbjs.supabase.co',
+                'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp3dnVhZ3p0YmVkYmJxamJuYmpzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM0NjY4MTksImV4cCI6MjA4OTA0MjgxOX0.XTVO2GoQ0lKshH4615-s19rq3mvTITwaAB6aJSpRbJ8'
+            );
+
+            // 2. DOM Elements
+            const toggleBtn = document.getElementById('toggle-btn');
+            const authTitle = document.getElementById('auth-title');
+            const authBtn = document.getElementById('auth-btn');
+            const toggleText = document.getElementById('toggle-text');
+            const authForm = document.getElementById('auth-form');
+            const authMsg = document.getElementById('auth-message');
+            
+            let isLoginMode = true;
+
+            // 3. AUTH LOGIC: The Toggle
+            toggleBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                isLoginMode = !isLoginMode;
+                
+                authTitle.innerText = isLoginMode ? "Welcome Back" : "Create Account";
+                authBtn.innerText = isLoginMode ? "Login" : "Sign Up";
+                toggleText.innerText = isLoginMode ? "Don't have an account?" : "Already have an account?";
+                toggleBtn.innerText = isLoginMode ? "Create New Account" : "Login";
+                authMsg.style.display = 'none';
+            });
+
+            // 4. AUTH LOGIC: The Submit Action
+            authForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const email = document.getElementById('email').value;
+                const password = document.getElementById('password').value;
+                
+                authBtn.disabled = true;
+                authBtn.innerText = isLoginMode ? "Authenticating..." : "Creating...";
+
+                try {
+                    if (isLoginMode) {
+                        const { error } = await supabase.auth.signInWithPassword({ email, password });
+                        if (error) throw error;
+                    } else {
+                        const { error } = await supabase.auth.signUp({ email, password });
+                        if (error) throw error;
+                        
+                        authMsg.innerText = "Account successfully created! You can now log in.";
+                        authMsg.className = "alert alert-success";
+                        authMsg.style.display = "block";
+                        
+                        // Switch back to login UI automatically
+                        toggleBtn.click();
+                        document.getElementById('password').value = '';
+                    }
+                } catch (err) {
+                    authMsg.innerText = err.message;
+                    authMsg.className = "alert alert-error";
+                    authMsg.style.display = "block";
+                } finally {
+                    authBtn.disabled = false;
+                    authBtn.innerText = isLoginMode ? "Login" : "Sign Up";
+                }
+            });
+
+            // 5. AUTH LOGIC: Sign Out & State Observer
+            document.getElementById('logout-btn').addEventListener('click', () => {
+                supabase.auth.signOut();
+            });
+
+            supabase.auth.onAuthStateChange((event, session) => {
+                if (session) {
+                    document.getElementById('login-page').style.display = 'none';
+                    document.getElementById('dashboard-page').style.display = 'block';
+                } else {
+                    document.getElementById('dashboard-page').style.display = 'none';
+                    document.getElementById('login-page').style.display = 'flex';
+                    document.getElementById('password').value = '';
+                }
+            });
+        });
+
+        // Helper function for modules not yet built
+        function checkModule(event, targetPath) {
+            // Optional: If you haven't created the files for Equipment or Customer yet, 
+            // you can uncomment the alert and preventDefault to stop dead links.
+            // event.preventDefault();
+            // alert('This module folder/file has not been created yet.');
+        }
+    </script>
+</body>
+</html>
